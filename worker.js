@@ -1,5 +1,5 @@
 require('dotenv').config();
-const amqp = require('amqplib');
+// const amqp = require('amqplib');
 const { BPMCheckResult, ReadingValue } = require('./database');
 const { sendMessage } = require('./utils/messageService');
 const WebSocket = require('ws');

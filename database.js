@@ -32,6 +32,22 @@ const BPMCheckResult = sequelize.define('BPMCheckResult', {
   },
 });
 
+const User = sequelize.define('User', {
+  telegramId: {
+    type: DataTypes.STRING,
+    allowNull: true, // Allow telegramId to be nullable
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true, // Ensure email is unique
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+});
+
 async function initializeDatabase() {
   try {
     await sequelize.authenticate();
@@ -56,4 +72,4 @@ async function insertNumber(value) {
   }
 }
 
-module.exports = { initializeDatabase, insertNumber, BPMCheckResult,ReadingValue };
+module.exports = { initializeDatabase, insertNumber, BPMCheckResult,ReadingValue ,User};
