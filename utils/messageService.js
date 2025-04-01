@@ -4,8 +4,12 @@ const TelegramBot = require('node-telegram-bot-api');
 // replace the value below with the Telegram token you receive from @BotFather
 const token = process.env.TELEGRAM_BOT_TOKEN;
 
-// Create a bot that uses 'polling' to fetch new updates
-const bot = new TelegramBot(token, { polling: true });
+// Create a bot that uses webhook instead of polling
+const bot = new TelegramBot(token, { polling: false }); // Disable polling
+
+// Set up webhook
+const WEBHOOK_URL = `${process.env.API_URL}/bot${token}`;
+bot.setWebHook(WEBHOOK_URL);
 
 // Add the sendMessage function to send messages to a specific chat
 const sendMessage = async (message, timestamp) => {
@@ -23,22 +27,3 @@ const sendMessage = async (message, timestamp) => {
 };
 
 module.exports = { sendMessage };
-
-// Matches "/echo [whatever]"
-bot.onText(/\/echo (.+)/, (msg, match) => {
-  
-  const chatId = msg.chat.id;
-  const resp = match[1];
-
-  
-  bot.sendMessage(chatId, resp);
-});
-
-// Listen for any kind of message. There are different kinds of
-// messages.
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-
-  // send a message to the chat acknowledging receipt of their message
-  bot.sendMessage(chatId, 'Received your message');
-});
