@@ -5,7 +5,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const bodyParser = require('body-parser');
 const cors = require('cors'); 
-const { initializeDatabase, insertNumber, BPMCheckResult, User } = require('./database');
+const { initializeDatabase, insertNumber, BPMCheckResult, User, ReadingValue } = require('./database');
 // const amqp = require('amqplib'); 
 const { Op } = require('sequelize');
 const bcrypt = require('bcrypt'); 
@@ -54,7 +54,7 @@ app.post('/reading-data', async (req, res) => {
     const now = new Date();
     if (status !== 'Normal') {
       const message = `Immediate BPM Reading:\nValue: ${number}\nStatus: ${status}`;
-      // await sendMessage(message, now);
+      await sendMessage(message, now);
       console.log('📤 Immediate Telegram message sent:', message);
     }
     
@@ -89,44 +89,15 @@ app.post('/reading-data', async (req, res) => {
   }
 });
 
-// API to get BPM data by days
+// API to get BPM data for today
 app.get('/bpm-data/days', async (req, res) => {
-  const { startDate, endDate } = req.query;
-
   try {
-    if (!startDate || !endDate) {
-      return res.status(400).json({ error: 'startDate and endDate are required' });
-    }
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0); // Start of today
+    const endDate = new Date();
+    endDate.setHours(23, 59, 59, 999); // End of today
 
-    const bpmData = await BPMCheckResult.findAll({
-      where: {
-        timestamp: {
-          [Op.between]: [new Date(startDate), new Date(endDate)],
-        },
-      },
-      order: [['timestamp', 'ASC']],
-    });
-
-    res.json({ status: 'success', data: bpmData });
-  } catch (error) {
-    console.error('❌ Error fetching BPM data by days:', error.message);
-    res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
-  }
-});
-
-// API to get BPM data by month
-app.get('/bpm-data/month', async (req, res) => {
-  const { year, month } = req.query;
-
-  try {
-    if (!year || !month) {
-      return res.status(400).json({ error: 'year and month are required' });
-    }
-
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59); // Last day of the month
-
-    const bpmData = await BPMCheckResult.findAll({
+    const bpmData = await ReadingValue.findAll({
       where: {
         timestamp: {
           [Op.between]: [startDate, endDate],
@@ -137,11 +108,56 @@ app.get('/bpm-data/month', async (req, res) => {
 
     res.json({ status: 'success', data: bpmData });
   } catch (error) {
-    console.error('❌ Error fetching BPM data by month:', error.message);
+    console.error('❌ Error fetching BPM data for today:', error.message);
     res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
   }
 });
 
+// API to get BPM data for the current month
+app.get('/bpm-data/month', async (req, res) => {
+  try {
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1); // Start of the current month
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59); // End of the current month
+
+    const bpmData = await ReadingValue.findAll({
+      where: {
+        timestamp: {
+          [Op.between]: [startDate, endDate],
+        },
+      },
+      order: [['timestamp', 'ASC']],
+    });
+
+    res.json({ status: 'success', data: bpmData });
+  } catch (error) {
+    console.error('❌ Error fetching BPM data for the current month:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
+  }
+});
+
+// API to get BPM data for the previous month
+app.get('/bpm-data/last-month', async (req, res) => {
+  try {
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1); // Start of the previous month
+    const endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59); // End of the previous month
+
+    const bpmData = await ReadingValue.findAll({
+      where: {
+        timestamp: {
+          [Op.between]: [startDate, endDate],
+        },
+      },
+      order: [['timestamp', 'ASC']],
+    });
+
+    res.json({ status: 'success', data: bpmData });
+  } catch (error) {
+    console.error('❌ Error fetching BPM data for the previous month:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
+  }
+});
 
 app.post('/auth/register', async (req, res) => {
   const { email, password } = req.body;
