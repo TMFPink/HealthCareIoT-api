@@ -117,7 +117,20 @@ function generateDailyTimeSlots(startDate, endDate) {
   return days;
 }
 
-// API to get BPM data for a specific day, grouped by hour
+// Helper function to generate 6 time slots for a day
+function generateSixTimeSlots() {
+  const slots = [
+    { start: 0, end: 3, label: '00:00-03:59', value: null },
+    { start: 4, end: 7, label: '04:00-07:59', value: null },
+    { start: 8, end: 11, label: '08:00-11:59', value: null },
+    { start: 12, end: 15, label: '12:00-15:59', value: null },
+    { start: 16, end: 19, label: '16:00-19:59', value: null },
+    { start: 20, end: 23, label: '20:00-23:59', value: null },
+  ];
+  return slots;
+}
+
+// API to get BPM data for a specific day, grouped into 6 parts
 app.get('/bpm-data/day', async (req, res) => {
   const { date } = req.query; // Expecting date in YYYY-MM-DD format
 
@@ -141,19 +154,22 @@ app.get('/bpm-data/day', async (req, res) => {
       order: [['timestamp', 'ASC']],
     });
 
-    // Group data by hour
-    const hourlyData = generateHourlyTimeSlots();
+    // Group data into 6 time slots
+    const timeSlots = generateSixTimeSlots();
     bpmData.forEach((reading) => {
       const hour = new Date(reading.timestamp).getHours();
-      hourlyData[hour].value = reading.value; // Assuming `value` is the BPM reading
+      const slot = timeSlots.find((slot) => hour >= slot.start && hour <= slot.end);
+      if (slot) {
+        slot.value = slot.value ? (slot.value + reading.value) / 2 : reading.value; // Average value
+      }
     });
 
-    res.json({ status: 'success', data: hourlyData });
+    res.json({ status: 'success', data: timeSlots });
   } catch (error) {
     console.error('❌ Error fetching BPM data for the day:', error.message);
     res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
   }
-}),
+});
 
 // API to get BPM data for the current week, grouped by day with average value
 app.get('/bpm-data/week', async (req, res) => {
@@ -190,14 +206,21 @@ app.get('/bpm-data/week', async (req, res) => {
     console.error('❌ Error fetching BPM data for the current week:', error.message);
     res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
   }
-}),
+});
 
 // API to get BPM data for the current month, grouped by day with average value
 app.get('/bpm-data/month', async (req, res) => {
+  const { month } = req.query; // Expecting month in YYYY-MM format (e.g., "2025-03")
+
+  if (!month) {
+    return res.status(400).json({ status: 'error', message: 'Month is required in YYYY-MM format' });
+  }
+
   try {
-    const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1); // Start of the current month
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59); // End of the current month
+    const [year, monthIndex] = month.split('-').map(Number);
+    const startDate = new Date(Date.UTC(year, monthIndex - 1, 1, 0, 0, 0)); // First day of the specified month
+    const endDate = new Date(Date.UTC(year, monthIndex, 0, 23, 59, 59)); // Last day of the specified month
+    
 
     const bpmData = await ReadingValue.findAll({
       where: {
@@ -210,18 +233,15 @@ app.get('/bpm-data/month', async (req, res) => {
 
     const dailyData = generateDailyTimeSlots(startDate, endDate);
 
-    // Add a count property to track the number of readings for each day
-    dailyData.forEach((entry) => {
-      entry.total = 0; // Total sum of readings for the day
-      entry.count = 0; // Count of readings for the day
-    });
-
     bpmData.forEach((reading) => {
-      const day = formatDateToDDMMYYYY(reading.timestamp.toISOString().split('T')[0]);
-      const dayEntry = dailyData.find((entry) => entry.day === day);
-      if (dayEntry) {
-        dayEntry.total += reading.value; // Add the reading value to the total
-        dayEntry.count += 1; // Increment the count
+      const readingDate = new Date(reading.timestamp);
+      if (readingDate >= startDate && readingDate <= endDate) {
+        const day = formatDateToDDMMYYYY(readingDate.toISOString().split('T')[0]);
+        const dayEntry = dailyData.find((entry) => entry.day === day);
+        if (dayEntry) {
+          dayEntry.total = (dayEntry.total || 0) + reading.value; // Add the reading value to the total
+          dayEntry.count = (dayEntry.count || 0) + 1; // Increment the count
+        }
       }
     });
 
@@ -236,10 +256,10 @@ app.get('/bpm-data/month', async (req, res) => {
 
     res.json({ status: 'success', data: dailyData });
   } catch (error) {
-    console.error('❌ Error fetching BPM data for the current month:', error.message);
+    console.error('❌ Error fetching BPM data for the specified month:', error.message);
     res.status(500).json({ status: 'error', message: 'Failed to fetch BPM data' });
   }
-}),
+});
 
 // API to get BPM data for the previous month
 app.get('/bpm-data/last-month', async (req, res) => {
