@@ -16,11 +16,8 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-
-
 app.use(cors()); 
 app.use(bodyParser.json());
-
 
 initializeDatabase();
 
@@ -32,11 +29,9 @@ initializeDatabase();
 //   await channel.assertQueue('bpm_tasks');
 // })();
 
-
 wss.on('connection', (socket, req) => {
 
 });
-
 
 app.post('/reading-data', async (req, res) => {
   const { number } = req.body;
@@ -47,30 +42,44 @@ app.post('/reading-data', async (req, res) => {
     const id = await insertNumber(number); 
     console.log('📥 Stored in DB with ID:', id);
 
-    
     const status = number > 100 ? 'High' : number < 60 ? 'Low' : 'Normal';
-    
-    
+
+    // Calculate min, max, and average BPM for the current day
     const now = new Date();
-    if (status !== 'Normal') {
-      const message = `Immediate BPM Reading:\nValue: ${number}\nStatus: ${status}`;
-      await sendMessage(message, now);
-      console.log('📤 Immediate Telegram message sent:', message);
-    }
-    
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const readings = await ReadingValue.findAll({
+      where: {
+        timestamp: {
+          [Op.between]: [startOfDay, endOfDay],
+        },
+      },
+    });
+
+    const values = readings.map((reading) => reading.value);
+    const minBPM = Math.min(...values);
+    const maxBPM = Math.max(...values);
+    const avgBPM = values.reduce((sum, value) => sum + value, 0) / values.length;
+
     // Send WebSocket message for real-time updates
     try {
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ 
-            type: 'immediate_bpm', 
-            value: number, 
-            status, 
+            type: 'daily_bpm_summary', 
+            min: minBPM, 
+            max: maxBPM, 
+            avg: avgBPM.toFixed(2), 
+            value: number,
             timestamp: now,
           }));
         }
       });
-      console.log('📡 WebSocket message sent to all connected clients');
+      console.log('📡 WebSocket message sent with daily summary');
     } catch (wsError) {
       console.error('⚠️ Error sending WebSocket message:', wsError.message);
     }
@@ -80,7 +89,8 @@ app.post('/reading-data', async (req, res) => {
       status: 'success', 
       number, 
       dbId: id, 
-      bpmStatus: status 
+      bpmStatus: status,
+      dailySummary: { min: minBPM, max: maxBPM, avg: avgBPM.toFixed(2) },
     });
     
   } catch (err) {
@@ -88,6 +98,47 @@ app.post('/reading-data', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Failed to process reading data' });
   }
 });
+
+// Timer to calculate average BPM data every 30 seconds
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const thirtySecondsAgo = new Date(now.getTime() - 30 * 1000);
+
+    // Fetch readings from the last 30 seconds
+    const recentReadings = await ReadingValue.findAll({
+      where: {
+        timestamp: {
+          [Op.between]: [thirtySecondsAgo, now],
+        },
+      },
+    });
+
+    if (recentReadings.length === 0) {
+      console.log('⏳ No readings in the last 30 seconds.');
+      return;
+    }
+
+    // Calculate the average BPM value
+    const total = recentReadings.reduce((sum, reading) => sum + reading.value, 0);
+    const averageBPM = total / recentReadings.length;
+
+    console.log(`📊 Average BPM in the last 30 seconds: ${averageBPM}`);
+
+    // Determine the status based on the average BPM
+    const status = averageBPM > 100 ? 'High' : averageBPM < 60 ? 'Low' : 'Normal';
+
+    if (status !== 'Normal') {
+      const message = `Average BPM Reading (Last 30s):\nValue: ${averageBPM.toFixed(2)}\nStatus: ${status}`;
+      // Uncomment the line below to send the Telegram message
+      await sendMessage(message, now);
+      console.log('📤 Telegram message sent:', message);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error calculating average BPM:', error.message);
+  }
+}, 30 * 1000); // Run every 30 seconds
 
 // Helper function to format date from YYYY-MM-DD to DD/MM/YYYY
 function formatDateToDDMMYYYY(isoDateString) {

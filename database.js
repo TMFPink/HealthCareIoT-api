@@ -59,7 +59,7 @@ async function initializeDatabase() {
     await sequelize.sync({ alter: true }); // Sync models with the database
     console.log('✅ Tables are ready.');
     require('./mqtt.js');
-    // Adjust the sequence for the ReadingValues table
+    
     const maxIdResult = await sequelize.query('SELECT MAX(id) AS maxId FROM "ReadingValues";');
     
     const maxId = maxIdResult[0][0].maxid || 0; // Use the correct key 'maxid'
