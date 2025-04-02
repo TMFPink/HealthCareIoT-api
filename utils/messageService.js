@@ -8,9 +8,7 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 // Create a bot that uses webhook instead of polling
 const bot = new TelegramBot(token, { polling: false }); // Disable polling
 
-// Set up webhook
-const WEBHOOK_URL = `${process.env.API_URL}/bot${token}`;
-bot.setWebHook(WEBHOOK_URL);
+
 
 /**
  * Send a message to a user with a specific telegramId from the database.
